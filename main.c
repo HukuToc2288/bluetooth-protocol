@@ -7,8 +7,12 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <malloc.h>
+#include <memory.h>
 
 #define SOF 73
+
+uint8_t buffer[256];
+int bufpos = 0;
 
 enum packet_receive_error {
     OK = 0, NO_SOF = 1, CRC_INCORRECT = 2
@@ -44,15 +48,32 @@ int check_crc(const struct packet *Packet) {
 
 uint8_t receive_byte() {
     //stub
-    return 0;
+    return buffer[bufpos++];
 }
 
-void send_byte() {
+void send_byte(uint8_t byte) {
     //stub
+    buffer[bufpos++] = byte;
 }
 
-void send_packet(uint8_t* data, uint16_t length){
+void send_packet(const struct packet *pptr){
+    send_byte(SOF);
+    send_byte(pptr->type);
+    send_byte( pptr->length >> (uint16_t)8);
+    send_byte(pptr->length & 0xff);
+    for (int i = 0; i < pptr->length; ++i) {
+        send_byte(pptr->payload[i]);
+    }
+    send_byte(pptr->crc8);
+}
 
+struct packet make_packet(uint8_t type, uint8_t* data, uint16_t length){
+    struct packet p;
+    p.type = type;
+    p.length = length;
+    p.payload = data;
+    p.crc8 = gencrc((const uint8_t *) &p.type, p.type + 3);
+    return p;
 }
 
 enum packet_receive_error try_receive_packet(struct packet *pptr) {
@@ -73,8 +94,20 @@ enum packet_receive_error try_receive_packet(struct packet *pptr) {
 }
 
 int main(int argc, char **argv) {
-    struct packet Packet = {0, 8, "ti pidor", 235};
-    //Packet.crc8 = gencrc((const uint8_t *) &Packet.length, Packet.length + 2);
-    putc(check_crc(&Packet) + '0', stdout);
+    char data[] = "this is the test data\0";
+    struct packet sent = make_packet(0, data, strlen(data));
+    send_packet(&sent);
+    struct packet received;
+    bufpos = 0;
+    enum packet_receive_error code = try_receive_packet(&received);
+    if (code == CRC_INCORRECT){
+        fputs("crc doesn't match!", stderr);
+        return 1;
+    } else if (code == NO_SOF){
+        fputs("no SOF!", stderr);
+        return 2;
+    }
+    puts(received.payload);
+    puts("OK!");
     return 0;
 }

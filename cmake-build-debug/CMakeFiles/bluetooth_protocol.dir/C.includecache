@@ -13,4 +13,8 @@ stddef.h
 -
 stdio.h
 -
+malloc.h
+-
+memory.h
+-
 
